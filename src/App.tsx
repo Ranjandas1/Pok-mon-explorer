@@ -1,53 +1,50 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { Routes, Route } from "react-router-dom";
 import Header from "./components/Header";
-import SearchControls from "./components/SearchControls";
 import PokemonList from "./components/PokemonList";
-import { Pokemon, PokemonWithDetails } from "./types/pokemon";
+import PokemonDetail from "./components/PokemonDetail";
+import FavoritesList from "./components/FavoritesList";
+import SearchControls from "./components/SearchControls";
+import Pagination from "./components/Pagination";
 import {
+  getAllPokemonTypes,
   fetchPokemonList,
   fetchPokemonDetails,
-  getAllPokemonTypes,
 } from "./services/pokemonService";
+import { PokemonWithDetails } from "./types/pokemon";
 
 function App() {
-  const [allPokemon, setAllPokemon] = useState<PokemonWithDetails[]>([]);
-  const [filteredPokemon, setFilteredPokemon] = useState<PokemonWithDetails[]>(
-    []
-  );
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [pokemon, setPokemon] = useState<PokemonWithDetails[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState<string>("");
-  const [selectedType, setSelectedType] = useState<string>("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedType, setSelectedType] = useState("");
+  const [sortBy, setSortBy] = useState("id");
 
-  const pokemonTypes = getAllPokemonTypes();
-
-  // Fetch all Pokemon data
   useEffect(() => {
     const loadPokemon = async () => {
       try {
         setIsLoading(true);
         setError(null);
 
-        // Fetch the list of Pokemon
         const listResponse = await fetchPokemonList(150);
-
         const pokemonDetailsPromises = listResponse.results.map((pokemon) =>
           fetchPokemonDetails(pokemon.name)
         );
 
         const pokemonDetails = await Promise.all(pokemonDetailsPromises);
-        const formattedPokemon: PokemonWithDetails[] = pokemonDetails.map(
-          (pokemon: Pokemon) => ({
-            ...pokemon,
-            displayName: pokemon.name
-              .split("-")
-              .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-              .join(" "),
-          })
-        );
 
-        setAllPokemon(formattedPokemon);
-        setFilteredPokemon(formattedPokemon);
+        const formattedPokemon = pokemonDetails.map((pokemon) => ({
+          ...pokemon,
+          displayName: pokemon.name
+            .split("-")
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(" "),
+        }));
+
+        setPokemon(formattedPokemon);
       } catch (err) {
         setError(
           "Failed to load Pokémon data. Please check your connection and try again."
@@ -61,48 +58,82 @@ function App() {
     loadPokemon();
   }, []);
 
-  // Filter Pokemon based on selected type
-  useEffect(() => {
-    const filterPokemon = () => {
-      let filtered = [...allPokemon];
-      if (searchTerm.trim() !== "") {
-        const searchTermLower = searchTerm.toLowerCase();
-        filtered = filtered.filter(
-          (pokemon) =>
-            pokemon.name.toLowerCase().includes(searchTermLower) ||
-            pokemon.id.toString() === searchTermLower.replace("#", "")
-        );
-      }
-      if (selectedType !== "") {
-        filtered = filtered.filter((pokemon) =>
-          pokemon.types.some((typeInfo) => typeInfo.type.name === selectedType)
-        );
-      }
+  // Step 1: Filter the list
+  const filteredPokemon = useMemo(() => {
+    return pokemon.filter((p) => {
+      const matchesSearch = p.displayName
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
+      const matchesType =
+        !selectedType || p.types.some((t) => t.type.name === selectedType);
+      return matchesSearch && matchesType;
+    });
+  }, [pokemon, searchTerm, selectedType]);
 
-      setFilteredPokemon(filtered);
-    };
+  // Step 2: Paginate the filtered list
+  const paginatedPokemon = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredPokemon.slice(startIndex, endIndex);
+  }, [filteredPokemon, currentPage, itemsPerPage]);
 
-    filterPokemon();
-  }, [searchTerm, selectedType, allPokemon]);
+  // Step 3: Sort only the current page
+  const sortedCurrentPagePokemon = useMemo(() => {
+    return [...paginatedPokemon].sort((a, b) => {
+      if (sortBy === "name") return a.displayName.localeCompare(b.displayName);
+      if (sortBy === "-name") return b.displayName.localeCompare(a.displayName);
+      if (sortBy === "id") return a.id - b.id;
+      if (sortBy === "-id") return b.id - a.id;
+      return 0;
+    });
+  }, [paginatedPokemon, sortBy]);
 
   return (
     <div className="min-h-screen bg-gray-100">
       <Header />
 
-      <main className="container mx-auto px-4 py-6">
-        <SearchControls
-          searchTerm={searchTerm}
-          setSearchTerm={setSearchTerm}
-          selectedType={selectedType}
-          setSelectedType={setSelectedType}
-          pokemonTypes={pokemonTypes}
-        />
+      <main className="container mx-auto px-4 py-8">
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <>
+                <SearchControls
+                  searchTerm={searchTerm}
+                  setSearchTerm={setSearchTerm}
+                  selectedType={selectedType}
+                  setSelectedType={setSelectedType}
+                  pokemonTypes={getAllPokemonTypes()}
+                  sortBy={sortBy}
+                  setSortBy={setSortBy}
+                />
 
-        <PokemonList
-          pokemon={filteredPokemon}
-          isLoading={isLoading}
-          error={error}
-        />
+                <PokemonList
+                  pokemon={sortedCurrentPagePokemon}
+                  isLoading={isLoading}
+                  error={error}
+                />
+
+                <div className="mt-6">
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={Math.ceil(
+                      filteredPokemon.length / itemsPerPage
+                    )}
+                    onPageChange={setCurrentPage}
+                    itemsPerPage={itemsPerPage}
+                    onItemsPerPageChange={setItemsPerPage}
+                  />
+                </div>
+              </>
+            }
+          />
+          <Route path="/pokemon/:id" element={<PokemonDetail />} />
+          <Route
+            path="/favorites"
+            element={<FavoritesList allPokemon={pokemon} />}
+          />
+        </Routes>
       </main>
     </div>
   );

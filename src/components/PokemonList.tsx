@@ -14,8 +14,13 @@ function PokemonList({ pokemon, isLoading, error }: PokemonListProps) {
       <div className="flex flex-col items-center justify-center p-8 text-center">
         <div className="bg-red-100 text-red-800 p-4 rounded-lg mb-4 max-w-md">
           <h3 className="text-lg font-bold mb-2">Error Loading Data</h3>
-          <p>{error}</p>
         </div>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          Retry
+        </button>
       </div>
     );
   }
