@@ -29,7 +29,7 @@ function App() {
         setIsLoading(true);
         setError(null);
 
-        const listResponse = await fetchPokemonList(150);
+        const listResponse = await fetchPokemonList(); // No limit now
         const pokemonDetailsPromises = listResponse.results.map((pokemon) =>
           fetchPokemonDetails(pokemon.name)
         );
@@ -58,19 +58,19 @@ function App() {
     loadPokemon();
   }, []);
 
-  // Step 1: Filter the list
+  // Step 1: Filter by name, ID, and type
   const filteredPokemon = useMemo(() => {
     return pokemon.filter((p) => {
-      const matchesSearch = p.displayName
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase());
+      const matchesSearch =
+        p.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.id.toString() === searchTerm;
       const matchesType =
         !selectedType || p.types.some((t) => t.type.name === selectedType);
       return matchesSearch && matchesType;
     });
   }, [pokemon, searchTerm, selectedType]);
 
-  // Step 2: Paginate the filtered list
+  // Step 2: Paginate filtered results
   const paginatedPokemon = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
